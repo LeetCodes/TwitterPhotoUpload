@@ -81,6 +81,7 @@ package com.djbrick.twitter_photo_uploader;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.util.UUID;
+import twitter4j.TwitterFactory;
 import twitter4j.TwitterException;
 import twitter4j.auth.AccessToken;
 import twitter4j.auth.RequestToken;
@@ -678,7 +679,14 @@ public class MSTwitter {
         }
         finishTweet(tweetResult, tweetResultDesc);
 	}
-	
+
+    public static void clearCredentials(Context context) {
+        SharedPreferences prefs = context.getSharedPreferences(PERF_FILENAME, Context.MODE_PRIVATE);
+        final Editor edit = prefs.edit();
+        edit.remove(PREF_ACCESS_TOKEN);
+        edit.remove(PREF_ACCESS_TOKEN_SECRET);
+        edit.commit();
+    }
 	/**
 	 * Called when tweet if finished. Sends result to receiver if one is available
 	 * @param tweetResult True if tweet was successful

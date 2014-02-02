@@ -1,11 +1,15 @@
 package com.djbrick.twitter_photo_uploader;
 
+import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.ProgressDialog;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Matrix;
 import android.hardware.Camera;
 import android.net.Uri;
 import android.os.AsyncTask;
@@ -18,6 +22,7 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
@@ -91,22 +96,18 @@ public class MainActivity extends ActionBarActivity {
 
         // Constants
 
-        static String TWITTER_CONSUMER_KEY = "waVAu1dHyQBRp16kPs5uLA";
-        static String TWITTER_CONSUMER_SECRET = "N4DMN6x9ylA5WLleNtcuXncvhO3kaGPEjXwFA4e9s0";
+        static String TWITTER_CONSUMER_KEY = "";
+        static String TWITTER_CONSUMER_SECRET = "";
 
         private ProgressDialog mDialog;
         private Camera mCamera;
         private ImageView mPhotoDisplay;
         private Button mTakePicture;
-        private SurfaceHolder mPreviewHolder;
-        private Button mLoginButton;
+        private Button mRetakeButton;
+        private SurfaceView mCameraSurface;
         private Button mUploadButton;
-        private static SharedPreferences mSharedPreferences;
-        private static Twitter mTwitter;
-        private static RequestToken mRequestToken;
         private Bitmap mCurrentPhoto;
         private MSTwitter mMSTwitter;
-        ProgressDialog pDialog;
 
         public PlaceholderFragment() {
         }
@@ -134,7 +135,7 @@ public class MainActivity extends ActionBarActivity {
 
         private void openCamera(){
             try{
-                mCamera = Camera.open(Camera.CameraInfo.CAMERA_FACING_BACK);
+                mCamera = Camera.open(Camera.CameraInfo.CAMERA_FACING_FRONT);
             }catch (Exception e){
 
             }
@@ -147,15 +148,27 @@ public class MainActivity extends ActionBarActivity {
          */
         private void tweet() {
             // assemble data
-            String textToTweet = "testjfdgfd";
-
-             // use MSTwitter function to save image to file because startTweet() takes an image path
-            // this is done to avoid passing large image files between intents which is not android best practices
+            String textToTweet = "test";
             String tweetImagePath = MSTwitter.putBitmapInDiskCache(this.getActivity(), mCurrentPhoto);
 
             // start the tweet
             mMSTwitter.startTweet(textToTweet, tweetImagePath);
 
+        }
+
+        private void handleFinish(String message){
+            mDialog.cancel();
+            AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
+            builder.setMessage(message).setPositiveButton("ok",new DialogInterface.OnClickListener() {
+                @Override
+                public void onClick(DialogInterface dialogInterface, int i) {
+                }
+            });
+            AlertDialog dialog = builder.create();
+            dialog.show();
+            MSTwitter.clearCredentials(getActivity());
+            setCameraDisplayOrientation(getActivity(), Camera.CameraInfo.CAMERA_FACING_FRONT, mCamera);
+            startPreview();
         }
 
         private void handleTweetMessage(int event, String message) {
@@ -170,9 +183,11 @@ public class MainActivity extends ActionBarActivity {
                     break;
                 case MSTwitter.MSTWEET_STATUS_FINSIHED_SUCCCESS:
                     note = "Tweet sent successfully";
+                    handleFinish(note);
                     break;
                 case MSTwitter.MSTWEET_STATUS_FINSIHED_FAILED:
                     note = "Tweet failed:" + message;
+                    handleFinish(note);
                     break;
             }
 
@@ -180,7 +195,7 @@ public class MainActivity extends ActionBarActivity {
             SimpleDateFormat timeFmt = new SimpleDateFormat("h:mm:ss.S");
             String timeS = timeFmt.format(new Date());
 
-            mDialog.setMessage("\n[Message received at " + timeS +"]\n" + note);
+            Log.d("Photo Upload","\n[Message received at " + timeS +"]\n" + note);
 
         }
 
@@ -189,10 +204,12 @@ public class MainActivity extends ActionBarActivity {
         public View onCreateView(LayoutInflater inflater, ViewGroup container,
                 Bundle savedInstanceState) {
             View rootView = inflater.inflate(R.layout.fragment_main, container, false);
-            openCamera();
             mPhotoDisplay = (ImageView) rootView.findViewById(R.id.photo);
-            mLoginButton = (Button) rootView.findViewById(R.id.login);
             mUploadButton = (Button) rootView.findViewById(R.id.upload_picture);
+            mRetakeButton = (Button) rootView.findViewById(R.id.take_new_picture);
+            openCamera();
+            setCameraDisplayOrientation(getActivity(), Camera.CameraInfo.CAMERA_FACING_FRONT, mCamera);
+
 
             // make a MSTwitter event handler to receive tweet send events
             MSTwitter.MSTwitterResultReceiver myMSTReceiver = new MSTwitter.MSTwitterResultReceiver() {
@@ -212,18 +229,28 @@ public class MainActivity extends ActionBarActivity {
                 public void onClick(View arg0) {
                     // show  loading dialog
                     mDialog = ProgressDialog.show(getActivity(), "",
-                            "Loading. Please wait...", true);
+                            "Uploading Photo. Please wait...", true);
+                    mDialog.show();
                     tweet();
                 }
             });
 
+            mRetakeButton.setOnClickListener(new View.OnClickListener() {
 
-            SurfaceView cameraSurface = (SurfaceView) rootView.findViewById(R.id.camera_surface);
-            mPreviewHolder = cameraSurface.getHolder();
-            mPreviewHolder.addCallback(surfaceCallback);
+                @Override
+                public void onClick(View arg0) {
+                    startPreview();
+                    mRetakeButton.setVisibility(View.GONE);
+                }
+            });
+
+
+            mCameraSurface = (SurfaceView) rootView.findViewById(R.id.camera_surface);
+            SurfaceHolder previewHolder = mCameraSurface.getHolder();
+            previewHolder.addCallback(surfaceCallback);
 
             try {
-                mCamera.setPreviewDisplay(cameraSurface.getHolder());
+                mCamera.setPreviewDisplay(previewHolder);
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -239,9 +266,9 @@ public class MainActivity extends ActionBarActivity {
         }
 
         private void initPreview(int width, int height) {
-            if (mCamera!=null && mPreviewHolder.getSurface()!=null) {
+            if (mCamera!=null && mCameraSurface.getHolder().getSurface()!=null) {
                 try {
-                    mCamera.setPreviewDisplay(mPreviewHolder);
+                    mCamera.setPreviewDisplay(mCameraSurface.getHolder());
                 }
                 catch (Throwable t) {
                     Log.e("PreviewDemo-surfaceCallback",
@@ -252,8 +279,36 @@ public class MainActivity extends ActionBarActivity {
         }
 
 
+        private void setCameraDisplayOrientation(Activity activity,
+                                                       int cameraId, android.hardware.Camera camera) {
+            android.hardware.Camera.CameraInfo info =
+                    new android.hardware.Camera.CameraInfo();
+            android.hardware.Camera.getCameraInfo(cameraId, info);
+            int rotation = activity.getWindowManager().getDefaultDisplay()
+                    .getRotation();
+            int degrees = 0;
+            switch (rotation) {
+                case Surface.ROTATION_0: degrees = 0; break;
+                case Surface.ROTATION_90: degrees = 90; break;
+                case Surface.ROTATION_180: degrees = 180; break;
+                case Surface.ROTATION_270: degrees = 270; break;
+            }
+
+            int result;
+            if (info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT) {
+                result = (info.orientation + degrees) % 360;
+                result = (360 - result) % 360;  // compensate the mirror
+            } else {  // back-facing
+                result = (info.orientation - degrees + 360) % 360;
+            }
+            camera.setDisplayOrientation(result);
+        }
 
         private void startPreview() {
+            mCameraSurface.setVisibility(View.VISIBLE);
+            mPhotoDisplay.setVisibility(View.GONE);
+            mUploadButton.setVisibility(View.GONE);
+            mTakePicture.setVisibility(View.VISIBLE);
             if (mCamera!=null) {
                 mCamera.startPreview();
             }
@@ -267,8 +322,18 @@ public class MainActivity extends ActionBarActivity {
             mCurrentPhoto = BitmapFactory.decodeByteArray(
                     bytes, 0, bytes.length,options);
 
+            // photo defaults to landscape rotate it to portrait
+            Matrix matrix = new Matrix();
+            matrix.postRotate(270);
+            mCurrentPhoto = Bitmap.createBitmap(mCurrentPhoto, 0, 0, mCurrentPhoto.getWidth(), mCurrentPhoto.getHeight(), matrix, true);
+
+
+            mCameraSurface.setVisibility(View.GONE);
+            mTakePicture.setVisibility(View.GONE);
+            mUploadButton.setVisibility(View.VISIBLE);
+            mPhotoDisplay.setVisibility(View.VISIBLE);
+            mRetakeButton.setVisibility(View.VISIBLE);
             mPhotoDisplay.setImageBitmap(mCurrentPhoto);
-            startPreview();
         }
 
         SurfaceHolder.Callback surfaceCallback=new SurfaceHolder.Callback() {
