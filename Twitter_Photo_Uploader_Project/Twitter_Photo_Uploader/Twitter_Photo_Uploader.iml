@@ -72,6 +72,8 @@
     <orderEntry type="library" exported="" name="support-v4-19.0.0" level="project" />
     <orderEntry type="library" exported="" name="ComAndroidSupportAppcompatV71900.aar" level="project" />
     <orderEntry type="library" exported="" name="twitter4j-core-3.0.5" level="project" />
+    <orderEntry type="library" name="MSTwitter" level="project" />
+    <orderEntry type="library" name="twitter4j-core-3.0.6-SNAPSHOT" level="project" />
   </component>
 </module>
 

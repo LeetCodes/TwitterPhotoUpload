@@ -1,0 +1,11 @@
+<component name="libraryTable">
+  <library name="MSTwitter">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/Twitter_Photo_Uploader/libs/MSTwitter.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES>
+      <root url="jar://$PROJECT_DIR$/Twitter_Photo_Uploader/libs/MSTwitter.jar!/" />
+    </SOURCES>
+  </library>
+</component>

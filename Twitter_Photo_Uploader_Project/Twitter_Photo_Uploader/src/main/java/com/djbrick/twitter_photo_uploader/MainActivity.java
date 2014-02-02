@@ -24,14 +24,17 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.os.Build;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.ImageView;
+import android.widget.TextView;
 import android.widget.Toast;
-
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
 import twitter4j.StatusUpdate;
 import twitter4j.Twitter;
@@ -75,6 +78,12 @@ public class MainActivity extends ActionBarActivity {
         return super.onOptionsItemSelected(item);
     }
 
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data){
+        PlaceholderFragment currentFragment = (PlaceholderFragment)getSupportFragmentManager().findFragmentById(R.id.container);
+        currentFragment.onFragmentResult(requestCode, resultCode, data);
+    }
+
     /**
      * A placeholder fragment containing a simple view.
      */
@@ -82,22 +91,10 @@ public class MainActivity extends ActionBarActivity {
 
         // Constants
 
-        static String TWITTER_CONSUMER_KEY = "";
-        static String TWITTER_CONSUMER_SECRET = “”;
+        static String TWITTER_CONSUMER_KEY = "waVAu1dHyQBRp16kPs5uLA";
+        static String TWITTER_CONSUMER_SECRET = "N4DMN6x9ylA5WLleNtcuXncvhO3kaGPEjXwFA4e9s0";
 
-        // Preference Constants
-        static String PREFERENCE_NAME = "twitter_oauth";
-        static final String PREF_KEY_OAUTH_TOKEN = "oauth_token";
-        static final String PREF_KEY_OAUTH_SECRET = "oauth_token_secret";
-        static final String PREF_KEY_TWITTER_LOGIN = "isTwitterLoggedIn";
-
-        static final String TWITTER_CALLBACK_URL = "oauth://t4jsample";
-
-        // Twitter oauth urls
-        static final String URL_TWITTER_AUTH = "auth_url";
-        static final String URL_TWITTER_OAUTH_VERIFIER = "oauth_verifier";
-        static final String URL_TWITTER_OAUTH_TOKEN = "oauth_token";
-
+        private ProgressDialog mDialog;
         private Camera mCamera;
         private ImageView mPhotoDisplay;
         private Button mTakePicture;
@@ -107,7 +104,8 @@ public class MainActivity extends ActionBarActivity {
         private static SharedPreferences mSharedPreferences;
         private static Twitter mTwitter;
         private static RequestToken mRequestToken;
-        private File mCurrentPhoto;
+        private Bitmap mCurrentPhoto;
+        private MSTwitter mMSTwitter;
         ProgressDialog pDialog;
 
         public PlaceholderFragment() {
@@ -123,7 +121,12 @@ public class MainActivity extends ActionBarActivity {
             }
         }
 
-        @Override
+
+        protected void onFragmentResult(int requestCode, int resultCode, Intent data){
+            mMSTwitter.onCallingActivityResult(requestCode, resultCode, data);
+        }
+
+            @Override
         public void onResume(){
             super.onResume();
             openCamera();
@@ -137,38 +140,50 @@ public class MainActivity extends ActionBarActivity {
             }
         }
 
-        private void loginToTwitter() {
-            // Check if already logged in
-            if (!isTwitterLoggedInAlready()) {
-                ConfigurationBuilder builder = new ConfigurationBuilder();
-                builder.setOAuthConsumerKey(TWITTER_CONSUMER_KEY);
-                builder.setOAuthConsumerSecret(TWITTER_CONSUMER_SECRET);
-                twitter4j.conf.Configuration configuration = builder.build();
-
-                TwitterFactory factory = new TwitterFactory(configuration);
-                mTwitter = factory.getInstance();
-
-                try {
-                    mRequestToken = mTwitter
-                            .getOAuthRequestToken(TWITTER_CALLBACK_URL);
-                    this.startActivity(new Intent(Intent.ACTION_VIEW, Uri
-                            .parse(mRequestToken.getAuthenticationURL())));
-                } catch (TwitterException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-
 
 
         /**
-         * Check user already logged in your application using twitter Login flag is
-         * fetched from Shared Preferences
-         * */
-        private boolean isTwitterLoggedInAlready() {
-            // return twitter login status from Shared Preferences
-            return mSharedPreferences.getBoolean(PREF_KEY_TWITTER_LOGIN, false);
+         * Send tweet using MSTwitter object created in onCreate()
+         */
+        private void tweet() {
+            // assemble data
+            String textToTweet = "testjfdgfd";
+
+             // use MSTwitter function to save image to file because startTweet() takes an image path
+            // this is done to avoid passing large image files between intents which is not android best practices
+            String tweetImagePath = MSTwitter.putBitmapInDiskCache(this.getActivity(), mCurrentPhoto);
+
+            // start the tweet
+            mMSTwitter.startTweet(textToTweet, tweetImagePath);
+
         }
+
+        private void handleTweetMessage(int event, String message) {
+
+            String note = "";
+            switch (event) {
+                case MSTwitter.MSTWEET_STATUS_AUTHORIZING:
+                    note = "Authorizing app with twitter.com";
+                    break;
+                case MSTwitter.MSTWEET_STATUS_STARTING:
+                    note = "Tweet data send started";
+                    break;
+                case MSTwitter.MSTWEET_STATUS_FINSIHED_SUCCCESS:
+                    note = "Tweet sent successfully";
+                    break;
+                case MSTwitter.MSTWEET_STATUS_FINSIHED_FAILED:
+                    note = "Tweet failed:" + message;
+                    break;
+            }
+
+            // add note to results TextView
+            SimpleDateFormat timeFmt = new SimpleDateFormat("h:mm:ss.S");
+            String timeS = timeFmt.format(new Date());
+
+            mDialog.setMessage("\n[Message received at " + timeS +"]\n" + note);
+
+        }
+
 
         @Override
         public View onCreateView(LayoutInflater inflater, ViewGroup container,
@@ -179,76 +194,29 @@ public class MainActivity extends ActionBarActivity {
             mLoginButton = (Button) rootView.findViewById(R.id.login);
             mUploadButton = (Button) rootView.findViewById(R.id.upload_picture);
 
-            mSharedPreferences = this.getActivity().getApplicationContext().getSharedPreferences(
-                    "MyPref", 0);
-
-            mLoginButton.setOnClickListener(new View.OnClickListener() {
-
+            // make a MSTwitter event handler to receive tweet send events
+            MSTwitter.MSTwitterResultReceiver myMSTReceiver = new MSTwitter.MSTwitterResultReceiver() {
                 @Override
-                public void onClick(View arg0) {
-                    // Call login twitter function
-                    new Thread(new Runnable(){
-                        @Override
-                        public void run() {
-                            loginToTwitter();
-                        }
-                    }).start();
+                public void onRecieve(int tweetLifeCycleEvent, String tweetMessage) {
+                    handleTweetMessage(tweetLifeCycleEvent, tweetMessage);
                 }
-            });
+            };
+
+            mMSTwitter = new MSTwitter(getActivity(), TWITTER_CONSUMER_KEY, TWITTER_CONSUMER_SECRET, myMSTReceiver);
+
 
 
             mUploadButton.setOnClickListener(new View.OnClickListener() {
 
                 @Override
                 public void onClick(View arg0) {
-                    try {
-                        new updateTwitterStatus().execute("test");
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
+                    // show  loading dialog
+                    mDialog = ProgressDialog.show(getActivity(), "",
+                            "Loading. Please wait...", true);
+                    tweet();
                 }
             });
 
-            if (!isTwitterLoggedInAlready()) {
-                final Uri uri = this.getActivity().getIntent().getData();
-                if (uri != null && uri.toString().startsWith(TWITTER_CALLBACK_URL)) {
-                    new Thread(new Runnable(){
-                        @Override
-                        public void run() {
-                            // oAuth verifier
-                            String verifier = uri
-                                    .getQueryParameter(URL_TWITTER_OAUTH_VERIFIER);
-
-                            try {
-                                // Get the access token
-                                AccessToken accessToken = mTwitter.getOAuthAccessToken(
-                                        mRequestToken, verifier);
-
-                                // Shared Preferences
-                                SharedPreferences.Editor e = mSharedPreferences.edit();
-
-                                // After getting access token, access token secret
-                                // store them in application preferences
-                                e.putString(PREF_KEY_OAUTH_TOKEN, accessToken.getToken());
-                                e.putString(PREF_KEY_OAUTH_SECRET,
-                                        accessToken.getTokenSecret());
-                                // Store login status - true
-                                e.putBoolean(PREF_KEY_TWITTER_LOGIN, true);
-                                e.commit(); // save changes
-
-                                Log.e("Twitter OAuth Token", "> " + accessToken.getToken());
-
-                                // Hide login button
-                                mLoginButton.setVisibility(View.GONE);
-
-                            } catch (Exception e) {
-                                // Check log for login errors
-                                Log.e("Twitter Login Error", "> " + e.getMessage());
-                            }
-                        }
-                    }).start();
-                }
-            }
 
             SurfaceView cameraSurface = (SurfaceView) rootView.findViewById(R.id.camera_surface);
             mPreviewHolder = cameraSurface.getHolder();
@@ -293,23 +261,13 @@ public class MainActivity extends ActionBarActivity {
 
         @Override
         public void onPictureTaken(byte[] bytes, Camera camera) {
-            File photo=new File(Environment.getExternalStorageDirectory(), "photo.jpg");
 
-            if (photo.exists()) {
-                photo.delete();
-            }
+            BitmapFactory.Options options = new BitmapFactory.Options();
 
-            try {
-                FileOutputStream fos=new FileOutputStream(photo.getPath());
+            mCurrentPhoto = BitmapFactory.decodeByteArray(
+                    bytes, 0, bytes.length,options);
 
-                fos.write(bytes);
-                fos.close();
-            }
-            catch (java.io.IOException e) {
-                Log.e("PictureDemo", "Exception in photoCallback", e);
-            }
-
-            mCurrentPhoto = photo;
+            mPhotoDisplay.setImageBitmap(mCurrentPhoto);
             startPreview();
         }
 
@@ -330,66 +288,5 @@ public class MainActivity extends ActionBarActivity {
             }
         };
 
-        /**
-         * Function to update status
-         * */
-        class updateTwitterStatus extends AsyncTask<String, String, String> {
-
-            /**
-             * Before starting background thread Show Progress Dialog
-             * */
-            @Override
-            protected void onPreExecute() {
-                super.onPreExecute();
-                pDialog = new ProgressDialog(getActivity());
-                pDialog.setMessage("Updating to twitter...");
-                pDialog.setIndeterminate(false);
-                pDialog.setCancelable(false);
-                pDialog.show();
-            }
-
-            /**
-             * getting Places JSON
-             * */
-            protected String doInBackground(String... args) {
-                    Log.d("Tweet Text", "> " + args[0]);
-                    String status = args[0];
-                    ConfigurationBuilder builder = new ConfigurationBuilder();
-                    builder.setOAuthConsumerKey(TWITTER_CONSUMER_KEY);
-                    builder.setOAuthConsumerSecret(TWITTER_CONSUMER_SECRET);
-
-                    // Access Token
-                    String access_token = mSharedPreferences.getString(PREF_KEY_OAUTH_TOKEN, "");
-                    // Access Token Secret
-                    String access_token_secret = mSharedPreferences.getString(PREF_KEY_OAUTH_SECRET, "");
-
-                    AccessToken accessToken = new AccessToken(access_token, access_token_secret);
-                     mTwitter = new TwitterFactory(builder.build()).getInstance(accessToken);
-
-
-                        try{
-                            StatusUpdate statusUpdate = new StatusUpdate(status);
-                            statusUpdate.setMedia(mCurrentPhoto);
-                            mTwitter.updateStatus(status);
-                        }catch(TwitterException e){
-                            Log.d("TAG", "Pic Upload error" + e.getErrorMessage());
-                        }
-                    return null;
-                }
-
-
-            /**
-             * After completing background task Dismiss the progress dialog and show
-             * the data in UI Always use runOnUiThread(new Runnable()) to update UI
-             * from background thread, otherwise you will get error
-             * **/
-            protected void onPostExecute(String file_url) {
-                // dismiss the dialog after getting all products
-                pDialog.dismiss();
-
-
-            }
-
-        }
     }
 }
