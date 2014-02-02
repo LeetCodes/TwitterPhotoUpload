@@ -31,6 +31,7 @@ import android.os.Build;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 import java.io.ByteArrayInputStream;
@@ -78,6 +79,7 @@ public class MainActivity extends ActionBarActivity {
         // as you specify a parent activity in AndroidManifest.xml.
         switch (item.getItemId()) {
             case R.id.action_settings:
+                MSTwitter.clearCredentials(this);
                 return true;
         }
         return super.onOptionsItemSelected(item);
@@ -104,10 +106,11 @@ public class MainActivity extends ActionBarActivity {
         private ImageView mPhotoDisplay;
         private Button mTakePicture;
         private Button mRetakeButton;
-        private SurfaceView mCameraSurface;
+        private LinearLayout mWrapper;
         private Button mUploadButton;
         private Bitmap mCurrentPhoto;
         private MSTwitter mMSTwitter;
+        private SurfaceView mCameraSurface;
 
         public PlaceholderFragment() {
         }
@@ -117,8 +120,10 @@ public class MainActivity extends ActionBarActivity {
             super.onPause();
             try{
                 mCamera.release();
+                mWrapper.removeView(mCameraSurface);
+                mCameraSurface = null;
             }catch(Exception e){
-
+                e.printStackTrace();
             }
         }
 
@@ -130,14 +135,14 @@ public class MainActivity extends ActionBarActivity {
             @Override
         public void onResume(){
             super.onResume();
-            openCamera();
+           initCamera();
         }
 
         private void openCamera(){
             try{
                 mCamera = Camera.open(Camera.CameraInfo.CAMERA_FACING_FRONT);
             }catch (Exception e){
-
+                e.printStackTrace();
             }
         }
 
@@ -165,8 +170,8 @@ public class MainActivity extends ActionBarActivity {
                 }
             });
             AlertDialog dialog = builder.create();
+            mDialog.cancel();
             dialog.show();
-            MSTwitter.clearCredentials(getActivity());
             setCameraDisplayOrientation(getActivity(), Camera.CameraInfo.CAMERA_FACING_FRONT, mCamera);
             startPreview();
         }
@@ -200,6 +205,21 @@ public class MainActivity extends ActionBarActivity {
         }
 
 
+        private void initCamera(){
+            openCamera();
+            setCameraDisplayOrientation(getActivity(), Camera.CameraInfo.CAMERA_FACING_FRONT, mCamera);
+            mCameraSurface = new SurfaceView(getActivity());
+            mCameraSurface.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            mWrapper.addView(mCameraSurface);
+            SurfaceHolder previewHolder = mCameraSurface.getHolder();
+            previewHolder.addCallback(surfaceCallback);
+
+            try {
+                mCamera.setPreviewDisplay(previewHolder);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
         @Override
         public View onCreateView(LayoutInflater inflater, ViewGroup container,
                 Bundle savedInstanceState) {
@@ -207,9 +227,7 @@ public class MainActivity extends ActionBarActivity {
             mPhotoDisplay = (ImageView) rootView.findViewById(R.id.photo);
             mUploadButton = (Button) rootView.findViewById(R.id.upload_picture);
             mRetakeButton = (Button) rootView.findViewById(R.id.take_new_picture);
-            openCamera();
-            setCameraDisplayOrientation(getActivity(), Camera.CameraInfo.CAMERA_FACING_FRONT, mCamera);
-
+            mWrapper = (LinearLayout) rootView.findViewById(R.id.wrapper);
 
             // make a MSTwitter event handler to receive tweet send events
             MSTwitter.MSTwitterResultReceiver myMSTReceiver = new MSTwitter.MSTwitterResultReceiver() {
@@ -220,7 +238,6 @@ public class MainActivity extends ActionBarActivity {
             };
 
             mMSTwitter = new MSTwitter(getActivity(), TWITTER_CONSUMER_KEY, TWITTER_CONSUMER_SECRET, myMSTReceiver);
-
 
 
             mUploadButton.setOnClickListener(new View.OnClickListener() {
@@ -243,17 +260,6 @@ public class MainActivity extends ActionBarActivity {
                     mRetakeButton.setVisibility(View.GONE);
                 }
             });
-
-
-            mCameraSurface = (SurfaceView) rootView.findViewById(R.id.camera_surface);
-            SurfaceHolder previewHolder = mCameraSurface.getHolder();
-            previewHolder.addCallback(surfaceCallback);
-
-            try {
-                mCamera.setPreviewDisplay(previewHolder);
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
 
 
             mTakePicture = (Button) rootView.findViewById(R.id.take_picture);
