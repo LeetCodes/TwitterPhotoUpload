@@ -14,6 +14,7 @@ import android.hardware.Camera;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Environment;
+import android.os.Handler;
 import android.support.v7.app.ActionBarActivity;
 import android.support.v7.app.ActionBar;
 import android.support.v4.app.Fragment;
@@ -66,17 +67,12 @@ public class MainActivity extends ActionBarActivity {
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
-        
-        // Inflate the menu; this adds items to the action bar if it is present.
         getMenuInflater().inflate(R.menu.main, menu);
         return true;
     }
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-        // Handle action bar item clicks here. The action bar will
-        // automatically handle clicks on the Home/Up button, so long
-        // as you specify a parent activity in AndroidManifest.xml.
         switch (item.getItemId()) {
             case R.id.action_settings:
                 MSTwitter.clearCredentials(this);
@@ -146,11 +142,6 @@ public class MainActivity extends ActionBarActivity {
             }
         }
 
-
-
-        /**
-         * Send tweet using MSTwitter object created in onCreate()
-         */
         private void tweet() {
             // assemble data
             String textToTweet = "test";
@@ -258,6 +249,7 @@ public class MainActivity extends ActionBarActivity {
                 public void onClick(View arg0) {
                     startPreview();
                     mRetakeButton.setVisibility(View.GONE);
+                    mTakePicture.setText(getResources().getString(R.string.take_photo));
                 }
             });
 
@@ -265,7 +257,27 @@ public class MainActivity extends ActionBarActivity {
             mTakePicture = (Button) rootView.findViewById(R.id.take_picture);
             mTakePicture.setOnClickListener(new View.OnClickListener(){
                 public void onClick(View view){
-                    mCamera.takePicture(null, null, null, PlaceholderFragment.this);
+                    mTakePicture.setText("3");
+
+                    final Handler handler = new Handler();
+                    handler.postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            mTakePicture.setText(getResources().getString(R.string.countdown_2));
+                        }
+                    }, 1000);
+                    handler.postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            mTakePicture.setText(getResources().getString(R.string.countdown_1));
+                        }
+                    }, 2000);
+                    handler.postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            mCamera.takePicture(null, null, null, PlaceholderFragment.this);
+                        }
+                    }, 3000);
                 }
             });
             return rootView;
