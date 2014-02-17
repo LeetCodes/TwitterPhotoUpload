@@ -51,7 +51,7 @@ import twitter4j.auth.AccessToken;
 import twitter4j.auth.RequestToken;
 import twitter4j.conf.ConfigurationBuilder;
 
-public class MainActivity extends ActionBarActivity {
+public class MainActivity extends ActionBarActivity implements MessageDialog.MessageDialogListener {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -60,7 +60,7 @@ public class MainActivity extends ActionBarActivity {
 
         if (savedInstanceState == null) {
             getSupportFragmentManager().beginTransaction()
-                    .add(R.id.container, new PlaceholderFragment())
+                    .add(R.id.container, new MainFragment())
                     .commit();
         }
     }
@@ -74,8 +74,13 @@ public class MainActivity extends ActionBarActivity {
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         switch (item.getItemId()) {
-            case R.id.action_settings:
+            case R.id.action_logout:
                 MSTwitter.clearCredentials(this);
+                return true;
+            case R.id.action_message:
+                MessageDialog dialog = MessageDialog.newInstance();
+                dialog.show(getFragmentManager(), null);
+
                 return true;
         }
         return super.onOptionsItemSelected(item);
@@ -83,16 +88,18 @@ public class MainActivity extends ActionBarActivity {
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data){
-        PlaceholderFragment currentFragment = (PlaceholderFragment)getSupportFragmentManager().findFragmentById(R.id.container);
-        currentFragment.onFragmentResult(requestCode, resultCode, data);
+        MainFragment mainFragment = (MainFragment)getSupportFragmentManager().findFragmentById(R.id.container);
+        mainFragment.onFragmentResult(requestCode, resultCode, data);
     }
 
-    /**
-     * A placeholder fragment containing a simple view.
-     */
-    public static class PlaceholderFragment extends Fragment implements Camera.PictureCallback {
+    @Override
+    public void onDialogClosed(String tweetMessage) {
+        MainFragment mainFragment = (MainFragment)getSupportFragmentManager().findFragmentById(R.id.container);
+        mainFragment.setTweetMessage(tweetMessage);
 
-        // Constants
+    }
+
+    public static class MainFragment extends Fragment implements Camera.PictureCallback {
 
         static String TWITTER_CONSUMER_KEY = "";
         static String TWITTER_CONSUMER_SECRET = "";
@@ -107,8 +114,10 @@ public class MainActivity extends ActionBarActivity {
         private Bitmap mCurrentPhoto;
         private MSTwitter mMSTwitter;
         private SurfaceView mCameraSurface;
+        private String mTweetMessage;
+        private boolean mCurrentlyTweeting;
 
-        public PlaceholderFragment() {
+        public MainFragment() {
         }
 
         @Override
@@ -143,17 +152,15 @@ public class MainActivity extends ActionBarActivity {
         }
 
         private void tweet() {
-            // assemble data
-            String textToTweet = "test";
             String tweetImagePath = MSTwitter.putBitmapInDiskCache(this.getActivity(), mCurrentPhoto);
 
             // start the tweet
-            mMSTwitter.startTweet(textToTweet, tweetImagePath);
+            mMSTwitter.startTweet(mTweetMessage, tweetImagePath);
 
         }
 
         private void handleFinish(String message){
-            mDialog.cancel();
+            mDialog.dismiss();
             AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
             builder.setMessage(message).setPositiveButton("ok",new DialogInterface.OnClickListener() {
                 @Override
@@ -161,9 +168,9 @@ public class MainActivity extends ActionBarActivity {
                 }
             });
             AlertDialog dialog = builder.create();
-            mDialog.cancel();
             dialog.show();
             setCameraDisplayOrientation(getActivity(), Camera.CameraInfo.CAMERA_FACING_FRONT, mCamera);
+            mCurrentlyTweeting = false;
             startPreview();
         }
 
@@ -215,6 +222,8 @@ public class MainActivity extends ActionBarActivity {
         public View onCreateView(LayoutInflater inflater, ViewGroup container,
                 Bundle savedInstanceState) {
             View rootView = inflater.inflate(R.layout.fragment_main, container, false);
+            mCurrentlyTweeting = false;
+            mTweetMessage = "";
             mPhotoDisplay = (ImageView) rootView.findViewById(R.id.photo);
             mUploadButton = (Button) rootView.findViewById(R.id.upload_picture);
             mRetakeButton = (Button) rootView.findViewById(R.id.take_new_picture);
@@ -235,11 +244,14 @@ public class MainActivity extends ActionBarActivity {
 
                 @Override
                 public void onClick(View arg0) {
+                if (!mCurrentlyTweeting){
+                    mCurrentlyTweeting = true;
                     // show  loading dialog
                     mDialog = ProgressDialog.show(getActivity(), "",
                             "Uploading Photo. Please wait...", true);
                     mDialog.show();
                     tweet();
+                }
                 }
             });
 
@@ -275,7 +287,7 @@ public class MainActivity extends ActionBarActivity {
                     handler.postDelayed(new Runnable() {
                         @Override
                         public void run() {
-                            mCamera.takePicture(null, null, null, PlaceholderFragment.this);
+                            mCamera.takePicture(null, null, null, MainFragment.this);
                         }
                     }, 3000);
                 }
@@ -319,6 +331,8 @@ public class MainActivity extends ActionBarActivity {
             } else {  // back-facing
                 result = (info.orientation - degrees + 360) % 360;
             }
+            Camera.Parameters params = camera.getParameters();
+            params.setRotation(result);
             camera.setDisplayOrientation(result);
         }
 
@@ -326,7 +340,9 @@ public class MainActivity extends ActionBarActivity {
             mCameraSurface.setVisibility(View.VISIBLE);
             mPhotoDisplay.setVisibility(View.GONE);
             mUploadButton.setVisibility(View.GONE);
+            mRetakeButton.setVisibility(View.GONE);
             mTakePicture.setVisibility(View.VISIBLE);
+            mTakePicture.setText(getResources().getString(R.string.take_photo));
             if (mCamera!=null) {
                 mCamera.startPreview();
             }
@@ -339,12 +355,6 @@ public class MainActivity extends ActionBarActivity {
 
             mCurrentPhoto = BitmapFactory.decodeByteArray(
                     bytes, 0, bytes.length,options);
-
-            // photo defaults to landscape rotate it to portrait
-            Matrix matrix = new Matrix();
-            matrix.postRotate(270);
-            mCurrentPhoto = Bitmap.createBitmap(mCurrentPhoto, 0, 0, mCurrentPhoto.getWidth(), mCurrentPhoto.getHeight(), matrix, true);
-
 
             mCameraSurface.setVisibility(View.GONE);
             mTakePicture.setVisibility(View.GONE);
@@ -370,6 +380,10 @@ public class MainActivity extends ActionBarActivity {
                 // no-op
             }
         };
+
+        public void setTweetMessage(String message){
+            mTweetMessage = message;
+        }
 
     }
 }

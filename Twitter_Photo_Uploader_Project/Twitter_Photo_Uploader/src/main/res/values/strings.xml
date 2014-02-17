@@ -10,5 +10,10 @@
     <string name="countdown_3">3</string>
     <string name="countdown_2">2</string>
     <string name="countdown_1">1</string>
+    <string name="logout">Logout</string>
+    <string name="set_message">Set Message</string>
+    <string name="message_dialog_title">Set the tweet message</string>
+    <string name="ok">Ok</string>
+    <string name="cancel">Cancel</string>
 
 </resources>
